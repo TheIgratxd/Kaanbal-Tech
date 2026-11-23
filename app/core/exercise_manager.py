@@ -65,4 +65,6 @@ def activate_exercise(state: PedagogicalState, exercise: Exercise) -> None:
   state.expected_value = exercise.expected_value
   state.concept = exercise.skill
   state.hint_level = 0
+  state.consecutive_failures = 0
   state.transfer_verified = False
+  state.exercise_solved = False
