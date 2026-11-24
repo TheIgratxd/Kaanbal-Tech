@@ -1,9 +1,13 @@
+
 FROM node:22-slim
 
 WORKDIR /app
 
 COPY package.json ./
-COPY main.ts ./
+
+RUN npm install
+
+COPY . .
 
 ENV NODE_ENV=production
 ENV PORT=3000

@@ -6,9 +6,16 @@ import './auth.css'
 
 function AuthPage() {
   const [mode, setMode] = useState('login')
+  const [notice, setNotice] = useState('')
 
   const changeMode = (nextMode) => {
+    setNotice('') // limpia el aviso al cambiar de pestaña manualmente
     setMode(nextMode)
+  }
+
+  const handleRegistered = (message) => {
+    setMode('login')
+    setNotice(message)
   }
 
   return (
@@ -36,7 +43,17 @@ function AuthPage() {
               </p>
             </header>
 
-            <AuthForm key={mode} mode={mode} />
+            {notice && (
+              <p className="auth-status" role="status">
+                {notice}
+              </p>
+            )}
+
+            <AuthForm
+              key={mode}
+              mode={mode}
+              onRegistered={handleRegistered}
+            />
 
             <p className="security-note">
               <span aria-hidden="true">●</span>

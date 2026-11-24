@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 function EyeIcon({ hidden }) {
   return (
@@ -10,7 +11,8 @@ function EyeIcon({ hidden }) {
   )
 }
 
-function AuthForm({ mode }) {
+function AuthForm({ mode, onRegistered  }) {
+  const navigate = useNavigate()
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -27,33 +29,98 @@ function AuthForm({ mode }) {
     setStatus('')
   }
 
-  const handleSubmit = (event) => {
-    event.preventDefault()
+  const handleSubmit = async (event) => {
+    event.preventDefault();
 
-    const nextErrors = {}
+    const nextErrors = {};
+
     if (mode === 'register' && !formData.name.trim()) {
-      nextErrors.name = 'Ingresa tu nombre'
-    }
-    if (!formData.email.trim()) {
-      nextErrors.email = 'Ingresa tu correo'
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      nextErrors.email = 'Ingresa un correo válido'
-    }
-    if (!formData.password) {
-      nextErrors.password = 'Ingresa tu contraseña'
-    } else if (formData.password.length < 6) {
-      nextErrors.password = 'Usa al menos 6 caracteres'
+      nextErrors.name = 'Ingresa tu nombre';
     }
 
-    setErrors(nextErrors)
-    if (Object.keys(nextErrors).length === 0) {
-      setStatus(
-        mode === 'login'
-          ? 'Inicio de sesión listo para conectar'
-          : 'Registro listo para conectar',
-      )
+    if (!formData.email.trim()) {
+      nextErrors.email = 'Ingresa tu correo';
+    } else if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)
+    ) {
+      nextErrors.email = 'Ingresa un correo válido';
     }
-  }
+
+    if (!formData.password) {
+      nextErrors.password = 'Ingresa tu contraseña';
+    } else if (formData.password.length < 6) {
+      nextErrors.password = 'Usa al menos 6 caracteres';
+    }
+
+    setErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) return;
+
+    try {
+      setStatus('Procesando...');
+
+      const endpoint =
+        mode === 'login'
+          ? 'login'
+          : 'register';
+
+      const response = await fetch(
+        `http://localhost:3000/auth/${endpoint}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(
+            mode === 'login'
+              ? {
+                  email: formData.email,
+                  password: formData.password,
+                }
+              : formData,
+          ),
+        },
+      );
+
+      const result = await response.json();
+
+      if (mode === 'register') {
+        if (result.session) {
+          // Confirmación de correo desactivada: ya hay sesión
+          localStorage.setItem('access_token', result.session.access_token)
+          navigate('/dashboard')
+        } else {
+          // Hay que confirmar el correo: pasa a modo login con aviso
+          onRegistered?.('Revisa tu correo para confirmar tu cuenta.')
+        }
+      } else {
+        if (!result.session?.access_token) {
+          throw new Error('No se recibió una sesión válida')
+        }
+
+        localStorage.setItem('access_token', result.session.access_token)
+        navigate('/dashboard')
+      }
+
+      if (mode === 'register') {
+        setStatus(
+          result.session
+            ? '¡Cuenta creada correctamente!'
+            : 'Revisa tu correo para confirmar tu cuenta.',
+        );
+      } else {
+        if (!result.session?.access_token) {
+          throw new Error('No se recibió una sesión válida');
+        }
+
+        // Aquí puedes guardar la sesión de forma segura
+        setStatus('¡Bienvenido de nuevo!');
+      }
+
+    } catch (error) {
+      setStatus(error.message);
+    }
+  };
 
   return (
     <form className="auth-form" onSubmit={handleSubmit} noValidate>
