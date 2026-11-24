@@ -3,7 +3,7 @@ from typing import Any
 
 from botocore.exceptions import ClientError
 
-from app.core.state import PedagogicalState
+from ia.app.core.state import PedagogicalState
 
 
 TUTOR_PROMPT = """

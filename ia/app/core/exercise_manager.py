@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-  from app.core.state import PedagogicalState
+  from ia.app.core.state import PedagogicalState
 
 
 @dataclass(frozen=True)

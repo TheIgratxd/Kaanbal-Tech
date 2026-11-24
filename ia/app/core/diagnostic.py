@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from app.core.state import PedagogicalState
+from ia.app.core.state import PedagogicalState
 
 
 @dataclass(frozen=True)

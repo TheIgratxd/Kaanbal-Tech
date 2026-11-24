@@ -4,8 +4,8 @@ from typing import Any
 
 from botocore.exceptions import ClientError
 
-from app.core.answer_validator import find_arithmetic_slips, parse_number
-from app.core.state import PedagogicalState
+from ia.app.core.answer_validator import find_arithmetic_slips, parse_number
+from ia.app.core.state import PedagogicalState
 
 
 EVALUATOR_PROMPT = """

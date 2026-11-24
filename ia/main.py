@@ -6,10 +6,10 @@ from typing import Any
 import boto3
 from dotenv import load_dotenv
 
-from app.ai.evaluator import evaluate_student
-from app.ai.tutor import generate_tutor_response
-from app.core.answer_validator import validate_linear_answer
-from app.core.diagnostic import (
+from ia.app.ai.evaluator import evaluate_student
+from ia.app.ai.tutor import generate_tutor_response
+from ia.app.core.answer_validator import validate_linear_answer
+from ia.app.core.diagnostic import (
     DIAGNOSTIC_ITEMS,
     acknowledgment,
     intro_message,
@@ -17,13 +17,13 @@ from app.core.diagnostic import (
     reask_message,
     set_diagnostic_item,
 )
-from app.core.exercise_manager import activate_exercise, select_exercise
-from app.core.pedagogical_engine import (
+from ia.app.core.exercise_manager import activate_exercise, select_exercise
+from ia.app.core.pedagogical_engine import (
     build_profile,
     update_pedagogical_state,
     verify_transfer,
 )
-from app.core.state import PedagogicalState
+from ia.app.core.state import PedagogicalState
 
 load_dotenv()
 

@@ -17,12 +17,12 @@ for name, attrs in {
       module.__dict__.update(attrs)
       sys.modules[name] = module
 
-from app.ai.evaluator import _normalize_evaluation, _sanitize, evaluate_student
-from app.core.answer_validator import find_arithmetic_slips, validate_linear_answer
-from app.core.diagnostic import DIAGNOSTIC_ITEMS, set_diagnostic_item
-from app.core.pedagogical_engine import build_profile, update_pedagogical_state
-from app.core.state import PedagogicalState
-import main
+from ia.app.ai.evaluator import _normalize_evaluation, _sanitize, evaluate_student
+from ia.app.core.answer_validator import find_arithmetic_slips, validate_linear_answer
+from ia.app.core.diagnostic import DIAGNOSTIC_ITEMS, set_diagnostic_item
+from ia.app.core.pedagogical_engine import build_profile, update_pedagogical_state
+from ia.app.core.state import PedagogicalState
+import ia.main as main
 
 
 def test_validator():

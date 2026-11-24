@@ -1,6 +1,6 @@
 from typing import Any
 
-from app.core.state import Estimate, Hypothesis, PedagogicalState
+from ia.app.core.state import Estimate, Hypothesis, PedagogicalState
 
 
 STRATEGIES = {
