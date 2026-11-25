@@ -2,27 +2,25 @@
 
 > **IA que enseña a pensar, no solo a contestar.**
 
-Kaanbal es un prototipo de tutor de matemáticas para estudiantes de secundaria. En lugar de entregar directamente la respuesta, intenta identificar qué entiende el estudiante, detectar señales de confusión y elegir una intervención pedagógica: una pregunta diagnóstica, una representación concreta o visual, una explicación guiada, práctica independiente o un reto conceptual.
+Kaanbal es un prototipo de tutor de matemáticas para estudiantes de secundaria ($1.^{\circ}$, $2.^{\circ}$ y $3.^{\circ}$ grado, alineado con los planes de estudio de la SEP). En lugar de entregar directamente la respuesta, intenta identificar qué entiende el estudiante, detectar señales de confusión y elegir una intervención pedagógica: una pregunta diagnóstica, una representación concreta o visual, una explicación guiada, práctica independiente o un reto conceptual.
 
 El proyecto participa en el reto de UniconHub: **IA que enseña a pensar**.
 
 ## El problema
 
-En México, solo el 34% de los estudiantes alcanzó el nivel mínimo de competencia matemática en PISA 2022. La disponibilidad de respuestas generadas por IA puede ocultar la brecha de aprendizaje si el estudiante obtiene el resultado sin construir el razonamiento.
+En México, solo el $34\%$ de los estudiantes alcanzó el nivel mínimo de competencia matemática en PISA 2022. La disponibilidad de respuestas generadas por IA puede ocultar la brecha de aprendizaje si el estudiante obtiene el resultado sin construir el razonamiento.
 
 Kaanbal busca que la IA funcione como andamiaje: ayuda a avanzar, pero conserva el esfuerzo cognitivo del estudiante y solicita evidencia de comprensión.
 
 ## Cómo va actualmente
 
-El repositorio contiene una aplicación web conectada con una API de usuarios y diagnóstico, y un **tutor adaptativo en Python** conectado a Amazon Bedrock:
+El repositorio contiene una aplicación web conectada con una API de usuarios y diagnóstico en Supabase, y un **tutor adaptativo en Python** conectado a Amazon Bedrock:
 
-- Un evaluador pedagógico analiza la intención, la señal de comprensión, la evidencia y posibles misconceptions del último mensaje.
-- Un motor pedagógico selecciona la siguiente estrategia con base en el desempeño observado.
-- Un tutor genera la intervención sin resolver automáticamente el ejercicio.
-- El estado de la sesión conserva dominio conceptual, dominio procedimental y relacional, confianza, historial de estrategias, intentos y próximos pasos.
-- Un validador específico para ecuaciones lineales comprueba respuestas como `x = 5` y detecta si el estudiante incluyó una justificación.
-- Un administrador selecciona ejercicios de ecuaciones lineales con dificultad progresiva.
-- La transferencia se marca cuando el estudiante resuelve un ejercicio de mayor dificultad, justifica su procedimiento y necesita pocas pistas.
+- **Evaluación y andamiaje pedagógico:** un evaluador analiza la intención, la señal de comprensión, la evidencia y posibles *misconceptions* del último mensaje; un motor pedagógico selecciona la siguiente estrategia y el tutor genera la intervención sin resolver automáticamente el ejercicio.
+- **Estado de la sesión:** conserva dominio conceptual, dominio procedimental y relacional, confianza, historial de estrategias, intentos, transferencia y próximos pasos.
+- **Validación y progresión:** incluye validación determinista para respuestas (como ecuaciones lineales) apoyada en el evaluador, selección progresiva de ejercicios y detección de transferencia cuando el estudiante resuelve ejercicios de mayor dificultad con justificación y pocas pistas.
+- **Examen diagnóstico y base de preguntas:** cuenta con flujo de selección de nivel/grado, persistencia en Supabase (`students`, `academic_info`, `student_answers`, `student_skill`) y cargas estructuradas mediante CSV (`questions.csv` y `options.csv`) para `questions` y `options` cubriendo $1.^{\circ}$, $2.^{\circ}$ y $3.^{\circ}$ de secundaria (con notación matemática segura como `*`, `/`, `^`, `sqrt()` y `pi` y tipos compatibles con `questions_question_type_check`: `multiple_choice`, `true_false`, `open` y `problem`).
+- **Autenticación y perfil:** `GET /users/me` resuelve el usuario autenticado directamente desde `req.user` (`SupabaseAuthGuard`) sin depender de una tabla pública `users`.
 
 ### Flujo del tutor IA
 
@@ -45,46 +43,75 @@ Siguiente intervención
 ```text
 .
 ├── frontend/                    # React/Vite: autenticación, panel, diagnóstico y tutor
-├── backend/                     # NestJS: autenticación, perfil y datos de estudiantes
-├── ia/                          # FastAPI y motor pedagógico conectado a Bedrock
+├── backend/                     # NestJS: autenticación, perfil, panel y diagnóstico (Supabase)
+├── ia/                          # FastAPI (api.py), motor pedagógico (main.py), pruebas y requirements.txt
 ├── docker-compose.yml           # Orquestación de los tres servicios
 └── README.md
 ```
 
 ## Requisitos
 
-- Python 3.10+
-- Credenciales de AWS con acceso a Amazon Bedrock
-- Un modelo habilitado en la región configurada, por ejemplo `us.amazon.nova-pro-v1:0`
+- Node.js y npm (para `frontend/` y `backend/`)
+- Python 3.10+ (para `ia/`)
+- Proyecto y credenciales de Supabase (`SUPABASE_URL`, clave de servidor `SUPABASE_SERVICE_ROLE_KEY` o `SUPABASE_SECRET_KEY`, y variables `VITE_*` en el frontend)
+- Credenciales de AWS con acceso a Amazon Bedrock y un modelo habilitado en la región configurada (por ejemplo `us.amazon.nova-pro-v1:0`)
 
-Las dependencias actuales son `boto3`, `botocore` y `python-dotenv`. Todavía falta formalizarlas en un `requirements.txt` o `pyproject.toml`.
+Las dependencias de Python están formalizadas en `ia/requirements.txt` (`boto3==1.42.17`, `python-dotenv==1.2.1`, `fastapi`, `uvicorn[standard]`).
 
 ## Ejecución local
 
-1. Instala las dependencias de Python:
+### 1. Servicio de IA (`ia/`)
+
+1. Crea y activa un entorno virtual e instala dependencias desde `ia/requirements.txt`:
 
    ```bash
+   python -m venv ia/.venv
+   # Windows (PowerShell):
+   ia\.venv\Scripts\activate
+   # Linux/macOS:
+   source ia/.venv/bin/activate
+
    python -m pip install -r ia/requirements.txt
    ```
 
-2. Configura tus credenciales de AWS mediante el mecanismo estándar de AWS y, opcionalmente, crea un archivo `.env`:
+2. Configura las variables en `ia/.env` (y credenciales de AWS para Bedrock):
 
    ```env
-   AWS_REGION=us-east-1
+   AWS_REGION=us-east-2
    BEDROCK_MODEL_ID=us.amazon.nova-pro-v1:0
    ```
 
-3. Ejecuta el modo de consola del tutor:
+3. Levanta el servidor FastAPI del tutor desde la raíz del repositorio (para que `ia` sea importable como paquete):
 
    ```bash
-   python ia/main.py
+   uvicorn ia.api:app --reload --port 8000
    ```
 
-4. Escribe `salir` para terminar. El programa muestra también el estado pedagógico de depuración de la sesión.
+   *(Si deseas probar el bucle interactivo por consola directamente, puedes ejecutar `python -m ia.main` y escribir `salir` para terminar).*
 
-> No subas credenciales, claves de AWS ni archivos `.env` al repositorio.
+### 2. Backend (`backend/` - NestJS)
 
-## Aplicación web
+1. Configura `backend/.env` con tus credenciales de Supabase, `CORS_ORIGINS` y el puerto deseado (por defecto `3000`).
+2. Instala dependencias y arranca el servidor (por defecto en `http://localhost:3000`):
+
+   ```bash
+   npm --prefix backend install
+   npm --prefix backend run start:dev
+   ```
+
+### 3. Frontend (`frontend/` - React/Vite)
+
+1. Configura las URLs en el `.env` del frontend alineadas con tus servicios activos (por ejemplo `VITE_API_URL=http://localhost:3000` para NestJS y `VITE_AI_API_URL=http://localhost:8000` para el servicio de IA). Si editas el `.env`, reinicia el servidor de Vite.
+2. Instala dependencias y levanta la interfaz:
+
+   ```bash
+   npm --prefix frontend install
+   npm --prefix frontend run dev
+   ```
+
+   Vite muestra la dirección local en la terminal (por defecto `http://localhost:5173`). Asegúrate de que el backend permita ese origen mediante `CORS_ORIGINS`.
+
+## Aplicación web y ejecución con Docker
 
 El repositorio incluye una interfaz React/Vite, una API NestJS y el servicio FastAPI del tutor.
 
@@ -98,24 +125,13 @@ Desde la raíz del repositorio, construye y levanta los servicios:
 docker compose up --build -d
 ```
 
-La aplicación queda disponible en `http://localhost:3000`, la API NestJS en `http://localhost:3001` y el servicio de IA en `http://localhost:8000`. Puedes comprobar los contenedores con `docker compose ps` y la IA en `http://localhost:8000/health`.
-
-La imagen del frontend incorpora las URLs de API durante el build. Para desplegar en otro host, define `VITE_API_URL` y `VITE_AI_API_URL` en el entorno de Docker Compose antes de reconstruir la imagen. Sus valores locales por defecto son `http://localhost:3001` y `http://localhost:8000`.
-
-### Ejecución local del frontend
-
-```bash
-npm --prefix frontend install
-npm --prefix frontend run dev
-```
-
-Vite muestra la dirección local en la terminal (por defecto `http://localhost:5173`). Asegúrate de que las APIs permitan ese origen mediante `CORS_ORIGINS`.
+Puedes comprobar los contenedores con `docker compose ps` y la salud del servicio de IA en `http://localhost:8000/health` (revisando en `docker-compose.yml` los puertos publicados para cada servicio y asegurándote de que `VITE_API_URL` y `VITE_AI_API_URL` coincidan con los puertos/URLs expuestos en tu entorno antes de construir la imagen del frontend).
 
 ### Funcionalidad conectada
 
-- **Cuenta:** `POST /auth/register`, `POST /auth/login` y `GET /users/me`. El registro puede requerir confirmación de correo según la configuración de Supabase; en ese caso, inicia sesión después de confirmarlo.
-- **Panel y diagnóstico:** `GET /students/dashboard`, `GET /students/diagnostic/questions?grade=N` y `POST /students/diagnostic`. Estas rutas requieren un token Bearer. El panel muestra los datos que la API devuelve, sin inventar progreso.
-- **Tutor:** `POST /sessions/start` y `POST /chat` en el servicio de IA. El historial y estado pedagógico se conservan en `sessionStorage` de la pestaña; el servicio no persiste sesiones.
+- **Cuenta:** `POST /auth/register`, `POST /auth/login` y `GET /users/me` (con `SupabaseAuthGuard`). El registro puede requerir confirmación de correo según la configuración de Supabase; en ese caso, inicia sesión después de confirmarlo.
+- **Panel y diagnóstico:** `GET /students/dashboard`, `GET /students/diagnostic/questions?grade=N` y `POST /students/diagnostic`. Estas rutas requieren un token Bearer y persisten resultados en Supabase. El panel muestra los datos que la API devuelve, sin inventar progreso.
+- **Tutor:** `POST /sessions/start` y `POST /chat` en el servicio de IA (`http://localhost:8000`). El historial y estado pedagógico se conservan en `sessionStorage` de la pestaña; el servicio no persiste sesiones.
 
 La aplicación todavía no ofrece recuperación de contraseña, edición de perfil ni un endpoint de cierre de sesión en el servidor. El cierre de sesión actual elimina el token guardado en el navegador.
 
@@ -123,20 +139,20 @@ La aplicación todavía no ofrece recuperación de contraseña, edición de perf
 
 Este proyecto todavía es un prototipo y no una plataforma lista para estudiantes o docentes. Los pendientes principales son:
 
-- **Diagnóstico inicial:** ampliar la evaluación breve para cubrir más habilidades que ecuaciones lineales y más grados con preguntas disponibles.
+- **Diagnóstico inicial:** ampliar el banco de preguntas y opciones en Supabase para cubrir más habilidades, reactivos y grados conforme avance el contenido.
 - **Contenido:** ampliar el banco de ejercicios, las representaciones y las rutas de aprendizaje para aritmética, álgebra, geometría y problemas contextualizados.
-- **Evaluación del razonamiento:** mejorar la validación para entender pasos matemáticos reales, no solo patrones de texto como `x = ...`.
-- **Persistencia y perfiles:** guardar sesiones, progreso y grupos para que un docente pueda atender un salón de 45 estudiantes.
+- **Evaluación del razonamiento:** mejorar la validación para entender pasos matemáticos reales, no solo patrones de texto o respuestas puntuales.
+- **Persistencia y perfiles:** guardar sesiones del tutor, progreso y grupos para que un docente pueda atender un salón de 45 estudiantes.
 - **Panel docente:** mostrar avances, errores frecuentes, confianza y recomendaciones sin exponer respuestas innecesarias.
 - **Seguridad y privacidad:** definir autenticación, protección de datos de menores, límites de uso y controles de contenido.
-- **Calidad técnica:** agregar `requirements.txt` o `pyproject.toml`, pruebas automatizadas, manejo de costos y observabilidad de Bedrock.
+- **Calidad técnica:** agregar pruebas automatizadas, manejo de costos y observabilidad de Bedrock, además de estandarizar `VITE_API_URL` entre entornos locales y Docker.
 - **Validación educativa:** probar con estudiantes y docentes, medir aprendizaje transferible y ajustar las estrategias con evidencia.
 
 ## Estado del proyecto
 
-**Fase:** MVP técnico con interfaz web, API de usuarios/diagnóstico y tutor adaptativo.
+**Fase:** MVP técnico con interfaz web, API de usuarios/diagnóstico conectada a Supabase y tutor adaptativo en Python/FastAPI conectado a Bedrock.
 
-**Prioridad actual:** validar los flujos de extremo a extremo y ampliar el diagnóstico y la persistencia con evidencia educativa.
+**Prioridad actual:** validar los flujos de extremo a extremo, poblar el banco diagnóstico en Supabase y ampliar el diagnóstico y la persistencia con evidencia educativa.
 
 ## Equipo y contexto
 
