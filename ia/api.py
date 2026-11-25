@@ -1,10 +1,9 @@
-from ia.app.core import state
-from ia.app.core.state import PedagogicalState, Estimate, Hypothesis
 import os
 from dataclasses import asdict, fields
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from ia.main import process_student_message
@@ -13,17 +12,28 @@ from ia.app.core.diagnostic import (
     intro_message,
     set_diagnostic_item,
 )
-from ia.app.core.state import (
-    Estimate,
-    Hypothesis,
-    PedagogicalState,
-)
+from ia.app.core.state import Estimate, Hypothesis, PedagogicalState
 
 
 app = FastAPI(
     title="Kaanbal AI Service",
     description="Servicio de inteligencia artificial de Kaanbal",
     version="1.0.0",
+)
+
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://localhost:5173",
+    ).split(",")
+    if origin.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -127,7 +137,10 @@ async def start_session():
     set_diagnostic_item(state, state.diagnostic_index)
 
     return {
-        "message": intro_message(),
+        "message": (
+            f"{intro_message()}\n\n"
+            f"{DIAGNOSTIC_ITEMS[state.diagnostic_index].statement}"
+        ),
         "conversation": [],
         "pedagogical_state": asdict(state),
     }

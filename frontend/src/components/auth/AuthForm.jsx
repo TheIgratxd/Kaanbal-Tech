@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { api } from '../../api'
+import { useAuth } from '../../context/AuthContext'
 
 function EyeIcon({ hidden }) {
   return (
@@ -11,8 +13,9 @@ function EyeIcon({ hidden }) {
   )
 }
 
-function AuthForm({ mode, onRegistered  }) {
+function AuthForm({ mode, onRegistered }) {
   const navigate = useNavigate()
+  const { saveSession } = useAuth()
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -21,6 +24,7 @@ function AuthForm({ mode, onRegistered  }) {
   const [errors, setErrors] = useState({})
   const [showPassword, setShowPassword] = useState(false)
   const [status, setStatus] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleChange = (event) => {
     const { name, value } = event.target
@@ -56,78 +60,40 @@ function AuthForm({ mode, onRegistered  }) {
 
     if (Object.keys(nextErrors).length > 0) return;
 
+    setIsSubmitting(true)
     try {
       setStatus('Procesando...');
 
-      const endpoint =
-        mode === 'login'
-          ? 'login'
-          : 'register';
-      const apiUrl = (import.meta.env.VITE_API_URL || 'http://localhost:3000')
-        .replace(/\/$/, '');
-
-      const response = await fetch(
-        `${apiUrl}/auth/${endpoint}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(
-            mode === 'login'
-              ? {
-                  email: formData.email,
-                  password: formData.password,
-                }
-              : formData,
-          ),
-        },
-      );
-
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(
-          typeof result.message === 'string'
-            ? result.message
-            : 'No se pudo completar la solicitud.',
-        );
-      }
+      const payload = mode === 'login'
+        ? { email: formData.email, password: formData.password }
+        : formData
+      const result = await api(`/auth/${mode === 'login' ? 'login' : 'register'}`, {
+        method: 'POST',
+        body: payload,
+      })
 
       if (mode === 'register') {
-        if (result.session) {
-          // Confirmación de correo desactivada: ya hay sesión
-          localStorage.setItem('access_token', result.session.access_token)
+        if (result.session?.access_token) {
+          saveSession(result.session, result.user)
           navigate('/dashboard')
         } else {
-          // Hay que confirmar el correo: pasa a modo login con aviso
           onRegistered?.('Revisa tu correo para confirmar tu cuenta.')
         }
       } else {
         if (!result.session?.access_token) {
           throw new Error('No se recibió una sesión válida')
         }
-
-        localStorage.setItem('access_token', result.session.access_token)
+        saveSession(result.session, result.user)
         navigate('/dashboard')
       }
 
-      if (mode === 'register') {
-        setStatus(
-          result.session
-            ? '¡Cuenta creada correctamente!'
-            : 'Revisa tu correo para confirmar tu cuenta.',
-        );
-      } else {
-        if (!result.session?.access_token) {
-          throw new Error('No se recibió una sesión válida');
-        }
-
-        // Aquí puedes guardar la sesión de forma segura
-        setStatus('¡Bienvenido de nuevo!');
+      if (mode === 'register' && !result.session?.access_token) {
+        setStatus('Revisa tu correo para confirmar tu cuenta.')
       }
-
     } catch (error) {
       setStatus(error.message);
+    } finally {
+      setIsSubmitting(false)
     }
   };
 
@@ -200,16 +166,25 @@ function AuthForm({ mode, onRegistered  }) {
       </div>
 
       {mode === 'login' && (
-        <a className="forgot-link" href="#recuperar">
-          ¿Olvidaste tu contraseña?
-        </a>
+        <p className="forgot-note">
+          La recuperación de contraseña aún no está disponible.
+        </p>
       )}
 
-      <button className="auth-submit" type="submit">
-        {mode === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}
+      <button className="auth-submit" type="submit" disabled={isSubmitting}>
+        {isSubmitting
+          ? 'Procesando...'
+          : mode === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}
       </button>
 
-      {status && <p className="auth-status" role="status">{status}</p>}
+      {status && (
+        <p
+          className={`auth-status ${status === 'Procesando...' ? '' : 'auth-status-error'}`}
+          role={status === 'Procesando...' ? 'status' : 'alert'}
+        >
+          {status}
+        </p>
+      )}
     </form>
   )
 }
