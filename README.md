@@ -90,6 +90,18 @@ Las dependencias actuales son `boto3`, `botocore` y `python-dotenv`. Todavía fa
 
 > No subas credenciales, claves de AWS ni archivos `.env` al repositorio.
 
+## Ejecución con Docker
+
+Configura `backend/.env` con `SUPABASE_URL` y una clave de servidor de Supabase (`SUPABASE_SERVICE_ROLE_KEY` o `SUPABASE_SECRET_KEY`). Para usar el tutor de IA, configura también las credenciales de AWS y, opcionalmente, `AWS_REGION` y `BEDROCK_MODEL_ID` en `ia/.env`.
+
+Desde la raíz del repositorio, construye y levanta los servicios:
+
+```bash
+docker compose up --build -d
+```
+
+La interfaz queda disponible en `http://localhost:3000` y la API en `http://localhost:3001`. El contenedor `ia` ejecuta la interfaz de consola interactiva; para interactuar con ella usa `docker compose run --rm ia`. Si la API se sirve desde otro host, define `VITE_API_URL` antes de construir el frontend.
+
 ## Qué falta
 
 Este proyecto todavía es un prototipo y no una plataforma lista para estudiantes o docentes. Los pendientes principales son:

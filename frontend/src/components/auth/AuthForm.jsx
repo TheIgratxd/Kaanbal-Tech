@@ -63,9 +63,11 @@ function AuthForm({ mode, onRegistered  }) {
         mode === 'login'
           ? 'login'
           : 'register';
+      const apiUrl = (import.meta.env.VITE_API_URL || 'http://localhost:3000')
+        .replace(/\/$/, '');
 
       const response = await fetch(
-        `http://localhost:3000/auth/${endpoint}`,
+        `${apiUrl}/auth/${endpoint}`,
         {
           method: 'POST',
           headers: {
@@ -83,6 +85,13 @@ function AuthForm({ mode, onRegistered  }) {
       );
 
       const result = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          typeof result.message === 'string'
+            ? result.message
+            : 'No se pudo completar la solicitud.',
+        );
+      }
 
       if (mode === 'register') {
         if (result.session) {

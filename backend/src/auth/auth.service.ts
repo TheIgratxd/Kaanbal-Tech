@@ -2,6 +2,8 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ConflictException } from '@nestjs/common';
@@ -36,6 +38,9 @@ export class AuthService {
 
     if (error) {
       console.error('Supabase error:', error.message, (error as any).cause);
+      if (error.status === HttpStatus.TOO_MANY_REQUESTS) {
+        throw new HttpException(error.message, HttpStatus.TOO_MANY_REQUESTS);
+      }
       throw new BadRequestException(error.message);
     }
     //Verificación del correo si está repetido

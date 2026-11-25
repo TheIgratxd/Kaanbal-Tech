@@ -5,10 +5,13 @@ import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const allowedOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:5173')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
-  // Configuración CORS para permitir conexiones desde React
   app.enableCors({
-    origin: 'http://localhost:5173',
+    origin: allowedOrigins,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
@@ -22,10 +25,10 @@ async function bootstrap() {
     }),
   );
 
-  // Puerto del backend
-  await app.listen(3000);
+  const port = Number(process.env.PORT ?? 3000);
+  await app.listen(port);
 
-  console.log('🚀 Backend ejecutándose en http://localhost:3000');
+  console.log(`🚀 Backend ejecutándose en http://localhost:${port}`);
 }
 
 bootstrap();
