@@ -1,7 +1,14 @@
+
+from __future__ import annotations
+
 from typing import Any
 
-from ia.app.core.state import Estimate, Hypothesis, PedagogicalState
+from ia.app.core.state import Hypothesis, PedagogicalState
 
+
+# ---------------------------------------------------------------------------
+# Configuración pedagógica
+# ---------------------------------------------------------------------------
 
 STRATEGIES = {
     "diagnostic_question",
@@ -11,279 +18,735 @@ STRATEGIES = {
     "independent_practice",
     "conceptual_challenge",
 }
+
+LEVEL_VALUE = {
+    "not_observed": None,
+    "none": 0.0,
+    "weak": 0.25,
+    "partial": 0.55,
+    "strong": 0.9,
+}
+
 DIMENSIONS = ("procedural", "conceptual", "relational")
-LEVEL_VALUE = {"none": 0.0, "weak": 0.25, "partial": 0.55, "strong": 0.9}
+
 HYPOTHESIS_DIMENSION = {
+    "wrong_inverse_operation": "procedural",
+    "operates_one_side_only": "procedural",
+    "sign_error": "procedural",
+    "order_of_steps_error": "procedural",
     "rule_without_reason": "conceptual",
     "no_justification": "conceptual",
     "confuses_equality_meaning": "relational",
     "treats_x_as_label": "relational",
 }
-HELP_INTENTS = {
-    "expressing_confusion",
+
+# Pedir ayuda no significa necesariamente tener dificultades.
+# Estas intenciones modifican el apoyo, pero no reducen por sí solas
+# las estimaciones de aprendizaje.
+SUPPORT_REQUEST_INTENTS = {
+    "requesting_hint",
     "requesting_explanation",
-    "asking_question",
+    "expressing_confusion",
+}
+
+NEXT_STEP = {
+    "diagnostic_question": "Continuar explorando el razonamiento del estudiante.",
+    "concrete_representation": "Representar el problema con elementos concretos.",
+    "visual_representation": "Mostrar una representación visual del concepto.",
+    "guided_explanation": "Acompañar al estudiante con una explicación guiada.",
+    "independent_practice": "Proponer un ejercicio para resolver de manera independiente.",
+    "conceptual_challenge": "Comprobar si el estudiante comprende por qué funciona el procedimiento.",
 }
 
 
-# ---------------------------------------------------------------- estimaciones
+# ---------------------------------------------------------------------------
+# Utilidades
+# ---------------------------------------------------------------------------
+
+def _validation_status(validation: dict[str, Any] | None) -> str:
+    if not isinstance(validation, dict):
+        return "unrecognized"
+
+    status = validation.get("status")
+
+    if status in {"correct", "incorrect", "unrecognized"}:
+        return status
+
+    # Compatibilidad con posibles nombres anteriores.
+    if validation.get("is_correct") is True:
+        return "correct"
+
+    if validation.get("is_correct") is False:
+        return "incorrect"
+
+    return "unrecognized"
+
+
+def _get_estimate(state: PedagogicalState, dimension: str) -> Any:
+    return getattr(state, dimension)
+
+
+def _observed_dimensions(evaluation: dict[str, Any]) -> dict[str, str]:
+    dimensions = evaluation.get("dimensions", {})
+
+    if not isinstance(dimensions, dict):
+        return {}
+
+    return {
+        name: item.get("level", "not_observed")
+        for name, item in dimensions.items()
+        if name in DIMENSIONS
+        and isinstance(item, dict)
+        and item.get("level") in LEVEL_VALUE
+        and item.get("level") != "not_observed"
+    }
+
+
+def _append_unique(items: list, value: Any) -> None:
+    if value not in items:
+        items.append(value)
+
+
+def _mean(values: list[float]) -> float:
+    if not values:
+        return 0.0
+
+    return sum(values) / len(values)
+
+
+def _get_min_confidence(state: PedagogicalState) -> float:
+    try:
+        return float(state.min_confidence())
+    except (AttributeError, TypeError, ValueError):
+        confidences = [
+            float(_get_estimate(state, name).confidence)
+            for name in DIMENSIONS
+        ]
+        return min(confidences) if confidences else 0.0
+
+
+# ---------------------------------------------------------------------------
+# Actualización de estimaciones
+# ---------------------------------------------------------------------------
+
 def update_estimate(
-    estimate: Estimate, level: str, quote: str, turn: int, hint_level: int
+    estimate: Any,
+    level: str,
+    quote: str,
+    hint_level: int = 0,
 ) -> None:
-  """Actualiza score y confianza. La evidencia obtenida con ayuda pesa menos."""
-  if level not in LEVEL_VALUE:
-    return  # not_observed: no se inventa evidencia
-  observed = LEVEL_VALUE[level]
-  weight = max(0.3, 1 - 0.2 * hint_level)
-  estimate.history.append(observed)
-  n = len(estimate.history)
-  alpha = max(0.25, 1 / (n + 1)) * weight
-  estimate.score = round(estimate.score + alpha * (observed - estimate.score), 3)
-  recent = estimate.history[-3:]
-  spread = max(recent) - min(recent)  # inconsistencia baja la confianza
-  estimate.confidence = round((n / (n + 2)) * (1 - 0.5 * spread), 2)
-  estimate.quotes.append({"turn": turn, "level": level, "quote": quote})
-  estimate.quotes = estimate.quotes[-5:]
+    """
+    Actualiza una estimación únicamente cuando existe evidencia.
+
+    El uso de pistas reduce el peso de la observación, pero no elimina
+    la evidencia de aprendizaje.
+    """
+    if level not in LEVEL_VALUE:
+        return
+
+    value = LEVEL_VALUE[level]
+
+    if value is None:
+        return
+
+    # Cuanto mayor sea el apoyo requerido, menor será el peso.
+    hint_weight = {
+        0: 1.0,
+        1: 0.85,
+        2: 0.7,
+        3: 0.55,
+        4: 0.4,
+    }
+
+    weight = hint_weight.get(
+        max(0, min(int(hint_level), 4)),
+        0.4,
+    )
+
+    old_score = float(estimate.score)
+
+    # Actualización gradual para evitar que una sola respuesta
+    # cambie drásticamente la estimación.
+    estimate.score = (
+        old_score * (1.0 - 0.25 * weight)
+        + value * (0.25 * weight)
+    )
+
+    if not isinstance(estimate.history, list):
+        estimate.history = []
+
+    estimate.history.append({
+        "level": level,
+        "value": value,
+        "weight": weight,
+    })
+
+    if not isinstance(estimate.quotes, list):
+        estimate.quotes = []
+
+    if quote:
+        estimate.quotes.append(quote)
+
+    # La confianza depende de la cantidad de observaciones,
+    # no solamente de la puntuación obtenida.
+    observations = len(estimate.history)
+
+    estimate.confidence = min(
+        0.95,
+        0.18 + observations * 0.15,
+    )
 
 
-# ----------------------------------------------------------------- hipótesis
+# ---------------------------------------------------------------------------
+# Gestión de hipótesis pedagógicas
+# ---------------------------------------------------------------------------
+
 def update_hypotheses(
     state: PedagogicalState,
     evaluation: dict[str, Any],
-    validation: dict[str, Any] | None,
 ) -> None:
-  seen = {error["label"] for error in evaluation["errors"]}
-  for error in evaluation["errors"]:
-    hypothesis = state.hypotheses.setdefault(
-        error["label"], Hypothesis(error["label"])
-    )
-    hypothesis.status = "active"
-    hypothesis.evidence.append(
-        {"turn": state.turn_count, "quote": error["quote"]}
-    )
-    hypothesis.evidence = hypothesis.evidence[-5:]
-    hypothesis.confidence = min(
-        0.95, hypothesis.confidence + (1 - hypothesis.confidence) * 0.3
-    )
+    """
+    Actualiza hipótesis sobre posibles dificultades.
 
-  # Contra-evidencia: si la dimensión relacionada con la hipótesis se muestra
-  # bien en este turno y el error no aparece, la hipótesis pierde confianza.
-  for label, hypothesis in state.hypotheses.items():
-    if hypothesis.status != "active" or label in seen:
-      continue
-    dimension = HYPOTHESIS_DIMENSION.get(label, "procedural")
-    level = evaluation["dimensions"][dimension]["level"]
-    if dimension == "procedural" and level == "partial" and not (
-        validation is not None and validation["status"] == "correct"
-    ):
-      continue
-    factor = {"strong": 0.6, "partial": 0.8}.get(level)
-    if factor is None:
-      continue
-    hypothesis.confidence = round(hypothesis.confidence * factor, 3)
-    if hypothesis.confidence < 0.15:
-      hypothesis.status = "refuted"
+    Una hipótesis representa una explicación provisional.
+    No debe tratarse como una característica permanente del estudiante.
+    """
+    if not isinstance(state.hypotheses, list):
+        state.hypotheses = []
+
+    errors = evaluation.get("errors", [])
+
+    if not isinstance(errors, list):
+        errors = []
+
+    for error in errors:
+        if not isinstance(error, dict):
+            continue
+
+        label = error.get("label")
+        quote = error.get("quote", "")
+
+        dimension = HYPOTHESIS_DIMENSION.get(label)
+
+        if dimension is None:
+            continue
+
+        existing = next(
+            (
+                hypothesis
+                for hypothesis in state.hypotheses
+                if hypothesis.label == label
+            ),
+            None,
+        )
+
+        if existing is None:
+            existing = Hypothesis(
+                label=label,
+                kind=dimension,
+                confidence=0.25,
+                evidence=[quote] if quote else [],
+                status="active",
+            )
+
+            state.hypotheses.append(existing)
+
+        else:
+            existing.confidence = min(
+                0.95,
+                existing.confidence + 0.15,
+            )
+
+            if quote and quote not in existing.evidence:
+                existing.evidence.append(quote)
+
+            existing.status = "active"
+
+    # Evidencia positiva que puede debilitar hipótesis anteriores.
+    dimensions = evaluation.get("dimensions", {})
+
+    if not isinstance(dimensions, dict):
+        return
+
+    for hypothesis in state.hypotheses:
+        dimension = getattr(hypothesis, "kind", None)
+        observation = dimensions.get(dimension, {})
+
+        if not isinstance(observation, dict):
+            continue
+
+        level = observation.get("level")
+
+        if level not in {"partial", "strong"}:
+            continue
+
+        # La evidencia positiva reduce la confianza en una hipótesis,
+        # pero no la elimina inmediatamente.
+        hypothesis.confidence = max(
+            0.0,
+            hypothesis.confidence - (
+                0.12 if level == "partial" else 0.2
+            ),
+        )
+
+        if hypothesis.confidence < 0.15:
+            hypothesis.status = "refuted"
 
 
-# ------------------------------------------------------------ resultado / apoyo
+# ---------------------------------------------------------------------------
+# Evaluación del resultado
+# ---------------------------------------------------------------------------
+
 def judge_outcome(
-    evaluation: dict[str, Any], validation: dict[str, Any] | None
+    evaluation: dict[str, Any],
+    validation: dict[str, Any] | None,
 ) -> str:
-  levels = [
-      d["level"]
-      for d in evaluation["dimensions"].values()
-      if d["level"] != "not_observed"
-  ]
-  status = validation["status"] if validation else None
-  if (
-      status == "incorrect"
-      or evaluation["errors"]
-      or any(level in {"none", "weak"} for level in levels)
-  ):
-    return "poor"
-  if levels and all(level in {"partial", "strong"} for level in levels):
-    return "good"
-  return "neutral"
+    """
+    Clasifica el resultado del turno.
 
+    Importante:
+    - Una dimensión no observada no equivale a una dimensión deficiente.
+    - Una respuesta correcta puede ser un buen resultado aunque todavía
+      falte evidencia conceptual.
+    """
+    status = _validation_status(validation)
+
+    errors = evaluation.get("errors", [])
+    dimensions = _observed_dimensions(evaluation)
+
+    if status == "incorrect":
+        return "poor"
+
+    if errors:
+        return "poor"
+
+    if any(
+        level in {"none", "weak"}
+        for level in dimensions.values()
+    ):
+        return "poor"
+
+    if status == "correct":
+        return "good"
+
+    if dimensions and all(
+        level in {"partial", "strong"}
+        for level in dimensions.values()
+    ):
+        return "good"
+
+    return "neutral"
+
+
+# ---------------------------------------------------------------------------
+# Gestión del nivel de apoyo
+# ---------------------------------------------------------------------------
 
 def update_support(
-    state: PedagogicalState, outcome: str, asked_for_help: bool
+    state: PedagogicalState,
+    outcome: str,
+    student_intent: str,
 ) -> None:
-  """Pista y andamiaje dependen del desempeño, no del número de turnos."""
-  if outcome == "poor" or asked_for_help:
-    state.consecutive_failures += 1
-    state.hint_level = min(4, state.hint_level + 1)
-    if state.consecutive_failures >= 2:
-      state.scaffolding_level = min(3, state.scaffolding_level + 1)
-  elif outcome == "good":
-    state.consecutive_failures = 0
-    if state.hint_level <= 1:
-      state.scaffolding_level = max(0, state.scaffolding_level - 1)  # fading
+    """
+    Modifica el apoyo pedagógico sin confundir una solicitud de ayuda
+    con un fracaso matemático.
+    """
+    state.consecutive_failures = max(
+        0,
+        int(state.consecutive_failures),
+    )
+
+    state.hint_level = max(
+        0,
+        min(4, int(state.hint_level)),
+    )
+
+    state.scaffolding_level = max(
+        0,
+        min(3, int(state.scaffolding_level)),
+    )
+
+    if outcome == "poor":
+        state.consecutive_failures += 1
+        state.hint_level = min(4, state.hint_level + 1)
+
+        if state.consecutive_failures >= 2:
+            state.scaffolding_level = min(
+                3,
+                state.scaffolding_level + 1,
+            )
+
+        return
+
+    if outcome == "good":
+        state.consecutive_failures = 0
+        state.hint_level = max(0, state.hint_level - 1)
+
+        if state.scaffolding_level > 0:
+            state.scaffolding_level -= 1
+
+        return
+
+    # Solicitar una pista o explicación modifica el apoyo disponible,
+    # pero no incrementa los fallos consecutivos.
+    if student_intent in SUPPORT_REQUEST_INTENTS:
+        state.hint_level = min(4, state.hint_level + 1)
 
 
-# ------------------------------------------------------------------ estrategia
+# ---------------------------------------------------------------------------
+# Selección de estrategia
+# ---------------------------------------------------------------------------
+
 def select_strategy(
     state: PedagogicalState,
     evaluation: dict[str, Any],
-    outcome: str,
     validation: dict[str, Any] | None,
+    outcome: str,
 ) -> str:
-  intent = evaluation["student_intent"]
-  conceptual_level = evaluation["dimensions"]["conceptual"]["level"]
-  correct = validation is not None and validation["status"] == "correct"
+    """
+    Selecciona la siguiente estrategia de enseñanza.
 
-  if correct:
-    justified = conceptual_level in {"partial", "strong"}
-    if justified and state.conceptual.confidence >= 0.4:
-      return "independent_practice"
+    En la fase de práctica no utiliza diagnostic_question:
+    la exploración ya terminó y ahora se trabaja sobre dificultades
+    específicas o comprensión conceptual.
+    """
+    if state.phase == "diagnostic":
+        return "diagnostic_question"
+
+    intent = evaluation.get("student_intent", "other")
+    status = _validation_status(validation)
+
+    dimensions = _observed_dimensions(evaluation)
+
+    procedural = dimensions.get("procedural")
+    conceptual = dimensions.get("conceptual")
+    relational = dimensions.get("relational")
+
+    # La petición explícita de ayuda tiene prioridad.
+    if intent in SUPPORT_REQUEST_INTENTS:
+        if state.scaffolding_level >= 2:
+            return "concrete_representation"
+
+        return "guided_explanation"
+
+    # Si el estudiante tuvo dificultades, se proporciona apoyo.
+    if outcome == "poor":
+        if state.scaffolding_level >= 2:
+            return "concrete_representation"
+
+        if state.scaffolding_level == 1:
+            return "visual_representation"
+
+        return "guided_explanation"
+
+    # Una respuesta correcta no implica que ya exista comprensión
+    # conceptual. Se puede comprobar con un reto breve.
+    if status == "correct":
+        if conceptual not in {"partial", "strong"}:
+            return "conceptual_challenge"
+
+        if relational not in {"partial", "strong"}:
+            return "conceptual_challenge"
+
+        return "independent_practice"
+
+    # Cuando el estudiante analiza o corrige razonamientos,
+    # conviene comprobar que puede justificar su interpretación.
+    if intent in {
+        "evaluating_reasoning",
+        "correcting_own_reasoning",
+        "checking_answer",
+        "providing_example",
+    }:
+        return "conceptual_challenge"
+
+    # Si el procedimiento es correcto, pero no hay suficiente
+    # evidencia conceptual, se propone una comprobación.
+    if procedural in {"partial", "strong"}:
+        if conceptual not in {"partial", "strong"}:
+            return "conceptual_challenge"
+
+        return "independent_practice"
+
+    # Si la confianza general sigue siendo baja, se usa una
+    # actividad guiada y específica, no se reinicia el diagnóstico.
+    if _get_min_confidence(state) < 0.25:
+        return "guided_explanation"
+
     return "conceptual_challenge"
-  if intent == "requesting_practice":
-    return "independent_practice" if state.exercise_solved else "diagnostic_question"
-  if intent in {"requesting_explanation", "asking_question"}:
-    return "guided_explanation"
-  if outcome == "poor" or intent == "expressing_confusion":
-    if state.consecutive_failures <= 1:
-      return "diagnostic_question"
-    if state.consecutive_failures == 2:
-      return "concrete_representation"
-    if state.consecutive_failures == 3:
-      return "visual_representation"
-    return "guided_explanation"
-  if state.min_confidence() < 0.4:
-    return "diagnostic_question"  # falta evidencia: pedir más
-  return "conceptual_challenge"
 
 
-NEXT_STEP = {
-    "diagnostic_question": "Obtener más evidencia sobre su razonamiento.",
-    "concrete_representation": "Relacionar el concepto con un ejemplo concreto.",
-    "visual_representation": "Interpretar una representación visual.",
-    "guided_explanation": "Justificar el siguiente paso con apoyo gradual.",
-    "independent_practice": "Resolver el nuevo ejercicio sin procedimiento dado.",
-    "conceptual_challenge": "Justificar por qué se realiza la operación elegida.",
-}
+# ---------------------------------------------------------------------------
+# Evidencia de aprendizaje
+# ---------------------------------------------------------------------------
+
+def record_learning_evidence(
+    state: PedagogicalState,
+    evaluation: dict[str, Any],
+    validation: dict[str, Any] | None,
+    outcome: str,
+) -> None:
+    if not isinstance(state.learning_evidence, list):
+        state.learning_evidence = []
+
+    dimensions = evaluation.get("dimensions", {})
+
+    if not isinstance(dimensions, dict):
+        dimensions = {}
+
+    observed = {}
+
+    for name in DIMENSIONS:
+        item = dimensions.get(name, {})
+
+        if not isinstance(item, dict):
+            continue
+
+        level = item.get("level", "not_observed")
+
+        if level != "not_observed":
+            observed[name] = {
+                "level": level,
+                "quote": item.get("quote", ""),
+            }
+
+    evidence = {
+        "turn": state.turn_count,
+        "intent": evaluation.get("student_intent", "other"),
+        "dimensions": observed,
+        "validation": _validation_status(validation),
+        "outcome": outcome,
+        "errors": [
+            error.get("label")
+            for error in evaluation.get("errors", [])
+            if isinstance(error, dict)
+        ],
+    }
+
+    state.learning_evidence.append(evidence)
 
 
-# ----------------------------------------------------------------- actualización
+# ---------------------------------------------------------------------------
+# Perfil del estudiante
+# ---------------------------------------------------------------------------
+
+def build_profile(state: PedagogicalState) -> dict[str, Any]:
+    """
+    Construye un perfil basado en las estimaciones actuales.
+
+    Este perfil puede actualizarse durante la práctica.
+    No representa un diagnóstico definitivo ni una etiqueta permanente.
+    """
+    strengths = []
+    difficulties = []
+    observations = {}
+
+    for dimension in DIMENSIONS:
+        estimate = _get_estimate(state, dimension)
+
+        score = float(estimate.score)
+        confidence = float(estimate.confidence)
+
+        observations[dimension] = {
+            "score": round(score, 3),
+            "confidence": round(confidence, 3),
+        }
+
+        # Se necesita cierta cantidad de evidencia para afirmar
+        # que existe una fortaleza o una dificultad.
+        if confidence < 0.3:
+            continue
+
+        if score >= 0.6:
+            strengths.append(dimension)
+
+        elif score <= 0.4:
+            difficulties.append(dimension)
+
+    active_hypotheses = [
+        {
+            "label": hypothesis.label,
+            "dimension": hypothesis.kind,
+            "confidence": round(
+                float(hypothesis.confidence),
+                3,
+            ),
+        }
+        for hypothesis in state.hypotheses
+        if hypothesis.status == "active"
+        and hypothesis.confidence >= 0.3
+    ]
+
+    overall_confidence = _mean([
+        observations[name]["confidence"]
+        for name in DIMENSIONS
+    ])
+
+    return {
+        "strengths": strengths,
+        "difficulties": difficulties,
+        "hypotheses": active_hypotheses,
+        "observations": observations,
+        "overall_confidence": round(
+            overall_confidence,
+            3,
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Actualización integral del estado
+# ---------------------------------------------------------------------------
+
 def update_pedagogical_state(
     state: PedagogicalState,
     evaluation: dict[str, Any],
     validation: dict[str, Any] | None,
-) -> tuple[str, str]:
-  """Aplica la evaluación al estado. Devuelve (estrategia, resultado)."""
-  state.turn_count += 1
-  if validation is not None and validation["status"] in {"correct", "incorrect"}:
-    state.attempt_count += 1
-  in_practice = state.phase == "practice"
-  if in_practice and validation is not None and validation["status"] == "correct":
-    state.exercise_solved = True
+) -> PedagogicalState:
+    """
+    Actualiza el estado pedagógico a partir de una evaluación.
 
-  weight_hint = state.hint_level if in_practice else 0
-  for name in DIMENSIONS:
-    dimension = evaluation["dimensions"][name]
-    update_estimate(
-        getattr(state, name),
-        dimension["level"],
-        dimension["quote"],
-        state.turn_count,
-        weight_hint,
+    Orden:
+    1. Registrar el turno.
+    2. Actualizar estimaciones.
+    3. Actualizar hipótesis.
+    4. Determinar el resultado.
+    5. Actualizar el apoyo.
+    6. Seleccionar estrategia.
+    7. Actualizar perfil y siguiente paso.
+    """
+    state.turn_count += 1
+
+    status = _validation_status(validation)
+
+    if status in {"correct", "incorrect"}:
+        state.attempt_count += 1
+
+    # Una respuesta correcta resuelve el ejercicio activo.
+    # El gestor de ejercicios podrá registrar el historial antes
+    # de activar el siguiente ejercicio.
+    if state.phase == "practice":
+        state.exercise_solved = status == "correct"
+
+    dimensions = evaluation.get("dimensions", {})
+
+    if not isinstance(dimensions, dict):
+        dimensions = {}
+
+    for name in DIMENSIONS:
+        item = dimensions.get(name, {})
+
+        if not isinstance(item, dict):
+            continue
+
+        update_estimate(
+            estimate=_get_estimate(state, name),
+            level=item.get("level", "not_observed"),
+            quote=item.get("quote", ""),
+            hint_level=state.hint_level,
+        )
+
+    update_hypotheses(state, evaluation)
+
+    outcome = judge_outcome(
+        evaluation,
+        validation,
     )
-  update_hypotheses(state, evaluation, validation)
-  for label in evaluation["strategies_used"]:
-    state.strategies_used[label] = state.strategies_used.get(label, 0) + 1
 
-  state.learning_evidence.append(
-      {
-          "turn": state.turn_count,
-          "intent": evaluation["student_intent"],
-          "levels": {
-              n: evaluation["dimensions"][n]["level"] for n in DIMENSIONS
-          },
-          "errors": [e["label"] for e in evaluation["errors"]],
-          "validation": validation["status"] if validation else None,
-      }
-  )
-  state.learning_evidence = state.learning_evidence[-10:]
+    record_learning_evidence(
+        state,
+        evaluation,
+        validation,
+        outcome,
+    )
 
-  outcome = judge_outcome(evaluation, validation)
-  if not in_practice:
-    return "diagnostic_question", outcome
+    state.strategies_used = (
+        state.strategies_used
+        if isinstance(state.strategies_used, list)
+        else []
+    )
 
-  update_support(state, outcome, evaluation["student_intent"] in HELP_INTENTS)
-  strategy = select_strategy(state, evaluation, outcome, validation)
-  if strategy not in STRATEGIES:
-    raise ValueError(f"Estrategia pedagógica no permitida: {strategy}")
-  state.teaching_strategy = strategy
-  state.strategy_history = (state.strategy_history + [strategy])[-5:]
-  state.next_step = NEXT_STEP[strategy]
-  return strategy, outcome
+    if state.phase == "diagnostic":
+        state.teaching_strategy = "diagnostic_question"
+        state.next_step = NEXT_STEP["diagnostic_question"]
 
+        state.profile = build_profile(state)
+
+        return state
+
+    update_support(
+        state,
+        outcome,
+        evaluation.get("student_intent", "other"),
+    )
+
+    strategy = select_strategy(
+        state,
+        evaluation,
+        validation,
+        outcome,
+    )
+
+    state.teaching_strategy = strategy
+    state.next_step = NEXT_STEP[strategy]
+
+    _append_unique(
+        state.strategies_used,
+        strategy,
+    )
+
+    if not isinstance(state.strategy_history, list):
+        state.strategy_history = []
+
+    state.strategy_history.append({
+        "turn": state.turn_count,
+        "strategy": strategy,
+        "outcome": outcome,
+        "intent": evaluation.get("student_intent", "other"),
+    })
+
+    # El perfil se actualiza después de cada turno de práctica.
+    state.profile = build_profile(state)
+
+    return state
+
+
+# ---------------------------------------------------------------------------
+# Verificación de transferencia
+# ---------------------------------------------------------------------------
 
 def verify_transfer(
     state: PedagogicalState,
-    evaluation: dict[str, Any],
     validation: dict[str, Any] | None,
-) -> None:
-  """Se llama DESPUÉS de actualizar el estado del turno."""
-  if (
-      state.exercise_difficulty >= 2
-      and validation is not None
-      and validation["status"] == "correct"
-      and evaluation["dimensions"]["conceptual"]["level"]
-      in {"partial", "strong"}
-      and state.hint_level <= 1
-  ):
+) -> bool:
+    """
+    Registra evidencia de transferencia cuando el estudiante resuelve
+    un ejercicio de dificultad igual o superior a 2.
+
+    No basta con acertar: también se requiere evidencia conceptual
+    y un nivel de ayuda reducido.
+    """
+    state.transfer_verified = False
+
+    if state.phase != "practice":
+        return False
+
+    if _validation_status(validation) != "correct":
+        return False
+
+    if state.exercise_difficulty < 2:
+        return False
+
+    if state.conceptual.score < 0.55:
+        return False
+
+    if state.conceptual.confidence < 0.3:
+        return False
+
+    if state.hint_level > 1:
+        return False
+
     state.transfer_verified = True
     state.transfers_verified += 1
 
-
-# ---------------------------------------------------------------------- perfil
-def confidence_quality(value: float) -> str:
-  if value < 0.4:
-    return "baja"
-  if value < 0.7:
-    return "media"
-  return "alta"
-
-
-def build_profile(state: PedagogicalState) -> dict[str, Any]:
-  strengths: list[dict[str, Any]] = []
-  difficulties: list[dict[str, Any]] = []
-  for name, estimate in state.estimates().items():
-    if estimate.confidence < 0.3:
-      continue  # sin evidencia suficiente no se concluye nada
-    entry = {
-        "area": name,
-        "score": estimate.score,
-        "confidence": estimate.confidence,
-        "confidence_quality": confidence_quality(estimate.confidence),
-        "evidence": estimate.quotes[-3:],
-    }
-    if estimate.score >= 0.6:
-      strengths.append(entry)
-    elif estimate.score <= 0.4:
-      difficulties.append(entry)
-
-  hypotheses = [
-      {
-          "label": h.label,
-          "confidence": round(h.confidence, 2),
-          "confidence_quality": confidence_quality(h.confidence),
-          "evidence": h.evidence[-3:],
-      }
-      for h in state.hypotheses.values()
-      if h.status == "active" and h.confidence >= 0.3
-  ]
-  hypotheses.sort(key=lambda h: h["confidence"], reverse=True)
-
-  overall = round(
-      sum(e.confidence for e in state.estimates().values()) / 3, 2
-  )
-  return {
-      "strengths": strengths,
-      "difficulties": difficulties,
-      "difficulty_hypotheses": hypotheses,
-      "strategies_used": dict(state.strategies_used),
-      "overall_confidence": overall,
-      "overall_confidence_quality": confidence_quality(overall),
-  }
+    return True
