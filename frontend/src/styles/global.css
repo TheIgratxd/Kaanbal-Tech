@@ -1,0 +1,416 @@
+:root {
+  --yellow: #e9e49f;
+  --orange: #ffa933;
+  --green: #4cff3b;
+  --black: #000000;
+
+  --color-bg: #f7f7f3;
+  --color-surface: #ffffff;
+  --color-text: #111111;
+  --color-muted: #6b6b66;
+  --color-border: #e4e4dc;
+  --color-danger: #dc2626;
+
+  --radius: 12px;
+  --shadow: 4px 4px 0 var(--black);
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--color-text);
+  background: var(--color-bg);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  line-height: 1.25;
+  margin: 0 0 0.5rem;
+}
+
+a {
+  color: var(--black);
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* ---------- Barra de navegación ---------- */
+.app-nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--yellow);
+  border-bottom: 3px solid var(--black);
+}
+
+.app-brand {
+  font-weight: 800;
+  font-size: 1.2rem;
+  color: var(--black);
+  margin-right: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+.app-nav a {
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  color: var(--black);
+  font-weight: 600;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.app-nav a:hover {
+  border-color: var(--black);
+}
+
+.app-nav a.active {
+  background: var(--black);
+  color: var(--yellow);
+}
+
+.app-logout {
+  margin-left: auto;
+}
+
+/* ---------- Contenedor de páginas ---------- */
+.app-page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+.app-subtitle {
+  color: var(--color-muted);
+  margin-top: 0;
+}
+
+/* ---------- Tarjetas ---------- */
+.app-grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 1.5rem 0;
+}
+
+.app-card {
+  background: var(--color-surface);
+  border: 2px solid var(--black);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+
+.app-card-label {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-muted);
+}
+
+.app-card-value {
+  margin: 0.4rem 0 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.app-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.app-cta h2 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+.app-cta p {
+  margin: 0.25rem 0 0;
+  color: var(--color-muted);
+}
+
+/* ---------- Botones ---------- */
+.app-btn {
+  padding: 0.6rem 1.2rem;
+  border: 2px solid var(--black);
+  border-radius: 8px;
+  background: var(--orange);
+  color: var(--black);
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 var(--black);
+  transition: transform 0.1s, box-shadow 0.1s, background 0.15s;
+}
+
+.app-btn:hover {
+  background: var(--green);
+}
+
+.app-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+.app-btn-ghost {
+  background: var(--color-surface);
+  box-shadow: none;
+}
+
+.app-btn-ghost:hover {
+  background: var(--black);
+  color: var(--yellow);
+}
+
+/* ---------- Badges y mensajes ---------- */
+.app-badge {
+  display: inline-block;
+  padding: 0.2rem 0.75rem;
+  border: 2px solid var(--black);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--black);
+}
+
+.app-badge-ok {
+  background: var(--green);
+}
+
+.app-badge-pending {
+  background: var(--orange);
+}
+
+.app-error {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+/* ---------- Dashboard: banner ---------- */
+.app-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  padding: 2rem;
+  background: var(--yellow);
+  border: 3px solid var(--black);
+  border-radius: 16px;
+  box-shadow: 6px 6px 0 var(--black);
+}
+
+.app-hero h1 {
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0.2rem 0 0.5rem;
+}
+
+.app-hero-kicker {
+  margin: 0;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.8rem;
+}
+
+.app-hero-text {
+  margin: 0 0 1.25rem;
+  max-width: 420px;
+  font-size: 1.05rem;
+}
+
+.app-btn-lg {
+  padding: 0.8rem 1.6rem;
+  font-size: 1.05rem;
+  box-shadow: 3px 3px 0 var(--black);
+}
+
+.app-hero-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 130px;
+  height: 130px;
+  background: var(--orange);
+  border: 3px solid var(--black);
+  border-radius: 50%;
+  box-shadow: 4px 4px 0 var(--black);
+  transform: rotate(-6deg);
+}
+
+.app-hero-badge span {
+  font-size: 2.6rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.app-hero-badge small {
+  font-weight: 700;
+  font-size: 0.72rem;
+  text-align: center;
+}
+
+/* ---------- Dashboard: ruta de aprendizaje ---------- */
+.app-path-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.app-path-head h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.app-path-count {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.app-progress {
+  height: 18px;
+  background: var(--color-bg);
+  border: 2px solid var(--black);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.app-progress-fill {
+  height: 100%;
+  background: var(--green);
+  border-right: 2px solid var(--black);
+  transition: width 0.6s ease;
+}
+
+.app-steps {
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.app-step {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.8rem 1rem;
+  border: 2px solid var(--black);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+
+.app-step h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.app-step p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--color-muted);
+}
+
+.app-step-num {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 2px solid var(--black);
+  border-radius: 50%;
+  font-weight: 800;
+  background: var(--color-surface);
+}
+
+.app-step-done .app-step-num {
+  background: var(--green);
+}
+
+.app-step-current {
+  background: var(--yellow);
+  box-shadow: 3px 3px 0 var(--black);
+}
+
+.app-step-current .app-step-num {
+  background: var(--orange);
+}
+
+.app-step-current p {
+  color: var(--black);
+}
+
+.app-step-locked {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+/* ---------- Dashboard: frase del día ---------- */
+.app-quote {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: var(--black);
+  color: var(--yellow);
+  border-radius: 12px;
+}
+
+.app-quote span {
+  font-size: 1.6rem;
+}
+
+.app-quote p {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* ---------- Móvil ---------- */
+@media (max-width: 600px) {
+  .app-hero {
+    padding: 1.25rem;
+  }
+  .app-hero-badge {
+    width: 100px;
+    height: 100px;
+  }
+  .app-hero-badge span {
+    font-size: 2rem;
+  }
+  .app-nav {
+    flex-wrap: wrap;
+    padding: 0.75rem 1rem;
+  }
+  .app-brand {
+    width: 100%;
+    margin-bottom: 0.25rem;
+  }
+  .app-page {
+    padding: 1.25rem 1rem 2rem;
+  }
+}
