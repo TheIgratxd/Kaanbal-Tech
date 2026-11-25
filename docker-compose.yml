@@ -27,5 +27,8 @@ services:
     env_file:
       - path: ./ia/.env
         required: false
-    stdin_open: true
-    tty: true
+    ports:
+      - "8000:8000"
+    environment:
+      AWS_REGION: us-east-2
+      PYTHONUNBUFFERED: 1
